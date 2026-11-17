@@ -5,6 +5,8 @@ import sys
 import os
 import time
 import traceback
+import re
+from importlib import import_module
 from pathlib import Path
 
 from logger import setup_logger, log, log_tool
@@ -16,14 +18,15 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
+        
 try:
-    import sounddevice as sd
+    sd = import_module("sounddevice")
 except ModuleNotFoundError:
     sd = None
 
 try:
     from google import genai
-    from google.genai import types
+    types = import_module("google.genai.types")
 except ModuleNotFoundError:
     genai = None
     types = None
@@ -112,7 +115,8 @@ def _take_screenshot_bytes() -> bytes | None:
     """Capture the whole screen as PNG bytes (for /screenshot)."""
     try:
         import io
-        import pyautogui
+        from importlib import import_module
+        pyautogui = import_module("pyautogui")
         buf = io.BytesIO()
         pyautogui.screenshot().save(buf, "PNG")
         return buf.getvalue()
@@ -1456,7 +1460,8 @@ class KaizumiLive:
             }
 
             def menu_factory():
-                import pystray
+                import importlib
+                pystray = importlib.import_module("pystray")
                 return pystray.Menu(
                     pystray.MenuItem(
                         lambda item: "🔇 Unmute" if self.ui.muted else "🔊 Mute (F4)",
@@ -1841,9 +1846,14 @@ class KaizumiLive:
             )
         self._human_confirmed = False
 
+        entry = self._tool_handlers.get(name)
+        if entry is None:
+            return ToolResult(ok=False, content=f"Unknown tool: {name}", error_kind="fatal")
+        fn, timeout = entry
+
         if face_verify:
             identity = await run_sync_tool(
-                lambda: vision_gesture({"action": "verify_identity"}, player=self.ui),
+                lambda: self._tool_handlers["vision_gesture"][0]({"action": "verify_identity"}),
                 "face_identity_verification",
                 timeout=30,
             )
@@ -1854,15 +1864,10 @@ class KaizumiLive:
                     error_kind="identity",
                 )
 
-        entry = self._tool_handlers.get(name)
-        if entry is None:
-            return ToolResult(ok=False, content=f"Unknown tool: {name}", error_kind="fatal")
-
         print(f"[Telegram] 🔧 {name} {_sanitize(name, args)}")
-        fn, timeout = entry
         return await run_sync_tool(lambda: fn(args), name, timeout=timeout)
 
-    def _build_config(self) -> types.LiveConnectConfig:
+    def _build_config(self):
         from datetime import datetime
 
         memory     = load_memory()
@@ -1921,7 +1926,7 @@ class KaizumiLive:
             ),
         )
 
-    async def _execute_tool(self, fc) -> types.FunctionResponse:
+    async def _execute_tool(self, fc) -> "types.FunctionResponse": # type: ignore
         name = fc.name
         args = dict(fc.args or {})
 
@@ -2256,7 +2261,8 @@ class KaizumiLive:
     async def _telegram_run_command(self, text: str) -> str:
         """Mini agent loop: Gemini interprets → tools run → text reply."""
         import api_keys
-        from google.genai import types as gtypes
+        from importlib import import_module
+        gtypes = import_module("google.genai.types")
         config = gtypes.GenerateContentConfig(
             system_instruction=self._telegram_context(),
             tools=[{"function_declarations": TOOL_DECLARATIONS}],

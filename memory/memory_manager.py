@@ -184,7 +184,7 @@ def should_extract_memory(user_text: str, assistant_text: str, api_key: str) -> 
             f"{combined}"
         )
         check = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.5-flash-lite",
             contents=prompt,
         )
         return "YES" in (check.text or "").upper()
